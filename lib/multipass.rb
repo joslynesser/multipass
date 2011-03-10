@@ -109,7 +109,7 @@ class MultiPass
   # http://rishida.net/tools/conversion/
   def unencode_javascript_unicode_escape(str)
     if str.respond_to?(:gsub!)
-      str.gsub!(/\\u([0-9a-fA-F]{4})/) do |s| 
+      str.gsub!(/\\u([0-9a-fA-F]{4})/) do |s|
         int = $1.to_i(16)
         if int.zero? && s != "0000"
           s
@@ -143,10 +143,18 @@ class MultiPass
   end
 
   if Object.const_defined?(:ActiveSupport)
-    def decode_json(data, s)
-      ActiveSupport::JSON.decode(s)
-    rescue ActiveSupport::JSON::ParseError
-      raise MultiPass::JSONError.new(data, s)
+    if defined?(ActiveSupport::JSON::ParseError) # Older versions of Rails
+      def decode_json(data, s)
+        ActiveSupport::JSON.decode(s)
+      rescue ActiveSupport::JSON::ParseError
+        raise MultiPass::JSONError.new(data, s)
+      end
+    else
+      def decode_json(data, s)
+        ActiveSupport::JSON.decode(s)
+      rescue ActiveSupport::JSON.parse_error
+        raise MultiPass::JSONError.new(data, s)
+      end
     end
   else
     require 'json'
