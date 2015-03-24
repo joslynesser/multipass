@@ -1,5 +1,5 @@
 require 'time'
-require 'ezcrypto'
+require 'multipass/crypto'
 
 class MultiPass
   class Invalid < StandardError
@@ -45,7 +45,7 @@ class MultiPass
   #   :url_safe => true
   def initialize(site_key, api_key, options = {})
     @url_safe   = !options.key?(:url_safe) || options[:url_safe]
-    @crypto_key = EzCrypto::Key.with_password(site_key, api_key)
+    @crypto     = Crypto.new(site_key, api_key, options)
   end
 
   def url_safe?
@@ -59,18 +59,20 @@ class MultiPass
       when Time, DateTime, Date then options[:expires].to_s
       else options[:expires].to_s
     end
-    self.class.encode_64 @crypto_key.encrypt(options.to_json), @url_safe
+    self.class.encode_64 @crypto.encrypt(options.to_json), @url_safe
   end
 
   # Decrypts the given multipass string and parses it as JSON.  Then, it checks
   # for a valid expiration date.
   def decode(data)
     json = options = nil
-    json = @crypto_key.decrypt(self.class.decode_64(data, @url_safe))
+    decoded = self.class.decode_64(data, @url_safe)
 
-    if json.nil?
+    if decoded.empty?
       raise MultiPass::DecryptError.new(data)
     end
+
+    json = @crypto.decrypt(decoded)
 
     options = decode_json(data, json)
 
@@ -99,8 +101,8 @@ class MultiPass
 
   CipherError = OpenSSL.const_defined?(:CipherError) ? OpenSSL::CipherError : OpenSSL::Cipher::CipherError
 
-  if Object.const_defined?(:ActiveSupport)
-    include ActiveSupport::Base64
+  if defined?(::ActiveSupport) && defined?(::ActiveSupport::Base64)
+    include ::ActiveSupport::Base64
   else
     require 'base64'
   end
@@ -145,7 +147,7 @@ class MultiPass
   if Object.const_defined?(:ActiveSupport)
     def decode_json(data, s)
       ActiveSupport::JSON.decode(s)
-    rescue ActiveSupport::JSON::ParseError
+    rescue ActiveSupport::JSON.parse_error
       raise MultiPass::JSONError.new(data, s)
     end
   else
